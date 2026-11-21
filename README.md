@@ -1,6 +1,5 @@
-# kindle-stripper
-
 <img align="right" src="./logo.svg" alt="Kindle-stripper mascot twirling an open padlock" width="180">
+# kindle-stripper
 
 Kindle-stripper is a standalone Windows command-line tool I built to simplify removing DRM from Kindle books I already own and converting them for personal use. Run it with no arguments to list downloaded ASINs and titles. Exports default to KFX-ZIP. Add `--convert` for EPUB 3 or PDF for supported PDF-backed print replicas.
 
