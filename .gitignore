@@ -1,0 +1,15 @@
+/target/
+/release/
+/Books/
+/.recovery/
+/runtime/
+*.keyfile
+*.k4i
+*.kinf*
+*.voucher
+*.azw
+*.azw3
+*.kfx
+*.kfx-zip
+*.epub
+*.pdf
