@@ -55,4 +55,4 @@ noDRM continued DeDRM Tools from Apprentice Harper's repository, and Satsuoni fo
 
 John Howell's KFX Input plugin served as a KFX format reference. The default EPUB engine uses Zachary Denton's boko. [KFX Input](https://www.mobileread.com/forums/showthread.php?t=291290) · [boko](https://github.com/zacharydenton/boko)
 
-This project is licensed under GPL-3.0-only. See [LICENSE](LICENSE).
+This project is licensed under GPL-3.0-only. See [LICENSE](LICENSE) and [third-party notices](THIRD-PARTY-NOTICES.md).
