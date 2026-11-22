@@ -6,6 +6,12 @@ Kindle-stripper is a standalone Windows command-line tool I built to simplify re
 
 <br clear="all">
 
+## Documentation
+
+- [Setup](docs/setup.md) covers the Windows release, Kindle downloads, and building from source.
+- [Usage](docs/usage.md) covers export formats, PowerShell examples, batch behaviour, and troubleshooting.
+- [How it works](docs/implementation.md) traces a download through the Rust pipeline and explains the design choices and validation limits.
+
 ## Kindle for Windows requirements
 
 Install Kindle for Windows, sign in to your Amazon account in the app, and download the books you want to export. Run Kindle-stripper under the same Windows user account that downloaded the books.
