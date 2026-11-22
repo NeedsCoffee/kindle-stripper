@@ -1,24 +1,67 @@
 # Kindle-stripper code flow
 
-The diagrams follow the CLI entry point and the export of an individual book. See [How Kindle-stripper works](implementation.md) for the source map and design rationale.
+The diagrams follow the Windows launch, the interactive prompts, and the export of an individual book. See [How Kindle-stripper works](implementation.md) for the source map and design rationale.
 
-## Command dispatch
+## Launch and command dispatch
 
 ```mermaid
 flowchart TD
-    Start["Parse command-line arguments"] --> Mode{"Command"}
-    Mode -->|"--help or -h"| Help["Print command syntax"]
-    Mode -->|"No selector"| Quiet{"Quiet mode?"}
-    Quiet -->|"Yes"| Done["Exit successfully"]
-    Quiet -->|"No"| List["Discover downloads and attempt to read titles"]
-    Mode -->|"One ASIN or folder"| Select["Resolve the ASIN or use the supplied folder"]
-    Mode -->|"ASIN list or --all"| Batch["Resolve the full selection and check the output folder"]
+    Start["Read command-line arguments"] --> Launch{"Launch mode"}
+    Launch -->|"No arguments and a dedicated interactive console"| Auto["Start prompts and record that exit should pause"]
+    Launch -->|"Standalone -i or --interactive"| Explicit["Check terminal input and output"]
+    Launch -->|"Other invocations"| Parse["Parse and validate command-line arguments"]
+    Auto --> Prompts["Collect interactive export options"]
+    Explicit -->|"Interactive terminal"| Prompts
+    Explicit -->|"Redirected input or output"| Result["Report any error and determine the exit status"]
+    Prompts -->|"Export requested"| Parse
+    Prompts -->|"Cancelled or failed"| Result
+    Parse -->|"--help or -h"| Help["Print the version and command syntax"]
+    Parse -->|"No selector"| Quiet{"Quiet mode?"}
+    Quiet -->|"Yes"| Result
+    Quiet -->|"No"| List["List downloads and available titles"]
+    Parse -->|"One ASIN or folder"| Select["Resolve the ASIN or use the supplied folder"]
+    Parse -->|"ASIN list or --all"| Batch["Resolve the full selection and check the output folder"]
+    Parse -->|"Invalid arguments"| Result
     Select --> Export["Export the selected book"]
     Batch --> Loop["Export each book in order"]
-    Loop --> Status["Report per-book errors and return failure if any book failed"]
+    Loop --> Status["Report per-book errors and fail the batch if any book failed"]
+    Help --> Result
+    List --> Result
+    Export --> Result
+    Status --> Result
+    Result --> Pause{"Automatic interactive launch?"}
+    Pause -->|"Yes"| Wait["Wait at Press Enter to close"]
+    Pause -->|"No"| Exit["Return the exit status"]
+    Wait --> Exit
 ```
 
-Discovery checks for the expected folder and main filename. Listing falls back to the ASIN when metadata is unavailable. A supplied ASIN list must resolve in full before the batch starts.
+The automatic route detects a fresh console through terminal input and output and the Windows console process list. This is the usual File Explorer double-click path. A supplied ASIN list must resolve in full before the batch starts.
+
+## Collect interactive export options
+
+```mermaid
+flowchart TD
+    Discover["Discover downloads in ASIN order"] --> Found{"Discovery succeeded?"}
+    Found -->|"Yes"| Number["Display one-based numbers, ASINs, and available titles"]
+    Found -->|"No"| Warning["Report the listing error and allow a book folder"]
+    Number --> Selection{"Read the book selection"}
+    Warning --> Selection
+    Selection -->|"Empty entry or end of input"| Cancel["Cancel the session"]
+    Selection -->|"Book folder or all"| Format{"Choose the export format"}
+    Selection -->|"Numbers, ASINs, or both"| Resolve["Map numbers to the displayed ASINs and check list entries"]
+    Resolve -->|"Invalid number, list entry, or duplicate"| Selection
+    Resolve -->|"Valid selection"| Format
+    Format -->|"KFX archive, default"| Destination{"Read the output folder"}
+    Format -->|"EPUB or PDF conversion"| Engine["Choose the EPUB engine, Boko by default"]
+    Engine --> Destination
+    Destination -->|"Folder provided"| Folder["Use the folder and enable creation of missing directories"]
+    Destination -->|"Blank for a single book"| Exact["Offer an exact output file path"]
+    Destination -->|"Blank for a batch"| Args["Submit the selection and options to the shared command dispatcher"]
+    Exact --> Args
+    Folder --> Args
+```
+
+Discovery checks for the expected book folder and main filename. Each entry shows its ASIN even if the title is unavailable. The prompts keep the displayed numbering for the session and preserve selection order. The dispatcher validates an interactive folder's nearest existing ancestor before creating missing directories. End of input also cancels the session during later prompts.
 
 ## Read a book and choose its output
 

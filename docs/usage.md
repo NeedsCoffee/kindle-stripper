@@ -1,8 +1,55 @@
 # Use Kindle-stripper
 
-These examples use PowerShell from the directory containing `kindle-stripper.exe`. Substitute ASINs from your own Kindle listing. See [setup](setup.md) for installation and account requirements.
+Download the books you want to export in Kindle for Windows, then double-click `kindle-stripper.exe` in File Explorer. See the [setup guide](setup.md) for installation and account requirements. If you prefer PowerShell or need to automate exports, see the [command-line reference](#command-line-reference).
 
-## List downloads and create an export folder
+## Use the interactive prompts
+
+1. **Select your books.** The prompts list downloaded books by number, ASIN, and title when available. Enter a single number such as `2`, an ASIN, a comma-separated list such as `3, B008E8XV56, 1`, a book folder, or `all`. Exports follow your selection order, or ASIN order for `all`. A book can appear once, even when selected by both number and ASIN. Ten-character numeric ASINs are read as ASINs. Press Enter with no selection to quit.
+2. **Choose a format.** Press Enter for **KFX archive**, or choose **EPUB/PDF** to convert. If you choose conversion, the next prompt offers **Boko** (the default) or **Basic** for reflowable EPUBs.
+3. **Choose where to save.** Enter an output folder, such as `C:\Users\YourName\Documents\Kindle Exports`. Kindle-stripper creates the folder and any missing parents if it can. Leave the folder blank to use the current directory. For a single book, this opens an optional prompt for an exact file path. Enter a file path in an existing directory or leave it blank to use a generated name.
+4. **Check the result.** The export prints the path it wrote or a per-book error. When launched without arguments in its own interactive console, Kindle-stripper shows **Press Enter to close** after the session ends.
+
+### Export formats
+
+| Interactive choice | Result | When to use it |
+| --- | --- | --- |
+| KFX archive (default) | `.kfx-zip` containing KFX components | Keep the original KFX structure in an archive or use another KFX-aware tool. |
+| EPUB/PDF for a supported reflowable book | `.epub` | Read reflowable text in an EPUB reader. |
+| EPUB/PDF for a supported PDF-backed print replica | `.pdf` | Preserve fixed pages. |
+
+Conversion chooses the format from the book. A fixed-layout KFX without supported PDF-backed pages produces an error.
+
+Boko is the default EPUB engine. For a reflowable book, try Basic if Boko fails or produces layout or navigation problems. EPUB layout and navigation fidelity vary by book.
+
+### Downloads and output files
+
+Listing scans the Kindle download directory for `<ASIN>_EBOK` folders with a matching `<ASIN>_EBOK.azw` main file. It displays an ASIN even if it cannot read the title. Discovery only confirms that the main file is present. Missing companions, unsupported data, or unavailable credentials can still cause export failures.
+
+The default name is similar to `Example Title - First Author [B008E8XV56].epub`. The tool sanitises Windows filenames, shortens long metadata values and falls back to an ASIN or source name when it lacks a usable title.
+
+Use a writable local output directory outside the Kindle app's `LocalState`, including after junction resolution. Successful batch exports stay in place if another book fails, and an existing export is preserved.
+
+## Troubleshoot an export
+
+| Symptom | What to check |
+| --- | --- |
+| Download directory cannot be opened | Confirm the packaged Kindle app is set up under the current Windows user and has downloaded a book. |
+| ASIN is missing or listing lacks a title | Check the book is local and in the expected folder layout. A missing title can mean metadata could not be read even though the download was discovered. |
+| No `.azw`, multiple `.azw` files, or missing voucher | Pass the individual book folder and keep its original companions together. |
+| Windows could not open the Kindle storage key or registration | Run under the Windows user that downloaded the book. Check that Kindle is still signed in on that installation. |
+| Unsupported voucher selector or KFX container | The tool supports specific Kindle delivery formats. Check the [tested setup](setup.md) and that the source is a KFX download. |
+| Output already exists | Pick another destination or filename. A successful previous export is preserved. |
+| Interactive output folder could not be created | Check that the path uses valid local directory names, stays outside Kindle app data, and is writable. |
+| Boko conversion or image validation failed | Choose **Basic** in the prompts for a reflowable book, or pass `--epub-engine basic` on the command line. You can also export KFX-ZIP to retain the source component structure. |
+| Fixed-layout KFX has no supported PDF-backed pages | Use KFX-ZIP to export the components if the delivery is otherwise supported. |
+
+Open a converted EPUB or PDF in your reader and check the reading order, images, and navigation you rely on before treating it as a usable copy. See [how it works](implementation.md) for the checks performed during conversion.
+
+## Command-line reference
+
+Run these PowerShell examples from the directory containing `kindle-stripper.exe`. Substitute ASINs from your own Kindle listing. Use `.\kindle-stripper.exe -i` or `.\kindle-stripper.exe --interactive` on its own in a terminal to open the prompts and return directly to the shell when finished. Running without arguments from an existing PowerShell or Command Prompt session lists the downloads.
+
+### List downloads and create an export folder
 
 ```powershell
 .\kindle-stripper.exe --help
@@ -12,9 +59,7 @@ $exports = Join-Path $env:USERPROFILE 'Documents\Kindle Exports'
 New-Item -ItemType Directory -Path $exports -Force | Out-Null
 ```
 
-Listing scans the Kindle download directory for `<ASIN>_EBOK` folders with a matching `<ASIN>_EBOK.azw` main file. It displays an ASIN even if it cannot read the title. Discovery only confirms that the main file is present. Missing companions, unsupported data, or unavailable credentials can still cause export failures.
-
-## Export one book
+### Export one book
 
 ```powershell
 # Save the component archive in the current directory.
@@ -30,13 +75,7 @@ Listing scans the Kindle download directory for `<ASIN>_EBOK` folders with a mat
 .\kindle-stripper.exe B008E8XV56 --output "$exports\My backup.kfx-zip"
 ```
 
-| Selection | Result | When to use it |
-| --- | --- | --- |
-| Default | `.kfx-zip` containing KFX components | Keep the original KFX structure in an archive or use another KFX-aware tool. |
-| `--convert` on a supported reflowable book | `.epub` | Read reflowable text in an EPUB reader. |
-| `--convert` on a supported PDF-backed print replica | `.pdf` | Preserve fixed pages. |
-
-Conversion chooses the format from the book. A fixed-layout KFX without supported PDF-backed pages produces an error. The extension you supply with `--output` only names the file. When you are unsure which conversion format applies, use `--output-folder` and let the tool choose the extension.
+Add `--convert` to choose EPUB 3 or PDF based on the book. The extension you supply with `--output` only names the file. When you are unsure which conversion format applies, use `--output-folder` and let the tool choose the extension.
 
 You can also pass a complete book folder directly. The folder needs exactly one `.azw` and the original `.md`, `.res`, and `.voucher` companions where applicable:
 
@@ -46,7 +85,7 @@ $bookFolder = Join-Path $content 'B008E8XV56_EBOK'
 .\kindle-stripper.exe "$bookFolder" --output-folder "$exports"
 ```
 
-## Choose an EPUB engine
+### Choose an EPUB engine
 
 Boko is the default. If it fails or the output has layout or navigation problems, try the built-in engine and compare the resulting EPUBs. Layout and navigation fidelity vary by book. Use the named output in the second example for a book you know is reflowable:
 
@@ -57,7 +96,7 @@ Boko is the default. If it fails or the output has layout or navigation problems
 
 `--epub-engine` requires `--convert` and only affects reflowable EPUB conversion. The legacy value `native` also selects `basic`. Engine failure ends that book's export. To try the other engine, run it explicitly.
 
-## Export multiple books
+### Export multiple books
 
 ```powershell
 # Export two books in the order supplied.
@@ -74,11 +113,9 @@ Quote the comma-separated selector so PowerShell passes one argument. Each entry
 
 Once a batch begins, the tool reports per-book errors, continues with later books, and returns a nonzero exit code if any book failed. Successful files stay in place. Existing files count as errors. To retry, select only the failed ASINs or choose a new destination or filename as appropriate.
 
-## Names, paths, and scripts
+### Names, paths, and scripts
 
-The default name is similar to `Example Title - First Author [B008E8XV56].epub`. The tool sanitises Windows filenames, shortens long metadata values and falls back to an ASIN or source name when it lacks a usable title.
-
-Use relative paths or drive-qualified local paths such as `C:\Exports`. Quote paths with spaces. Output directories must already exist and must be outside the Kindle app's `LocalState`, including after junction resolution. Outputs default to the current directory. Use `--output` or `--output-folder` on a single export.
+Use relative paths or drive-qualified local paths such as `C:\Exports`. Quote paths with spaces on the command line. Output directories must be outside the Kindle app's `LocalState`, including after junction resolution. Paths supplied using `--output` or `--output-folder` need an existing directory. Outputs default to the current directory.
 
 ```powershell
 .\kindle-stripper.exe --all --convert --output-folder "$exports" --quiet
@@ -88,19 +125,4 @@ if ($exportExitCode -ne 0) {
 }
 ```
 
-`--quiet` (or `-q`) suppresses progress and success messages and keeps errors visible. With no book selected, quiet mode suppresses listing. Use `--help` (or `-h`) for syntax.
-
-## Troubleshoot an export
-
-| Symptom | What to check |
-| --- | --- |
-| Download directory cannot be opened | Confirm the packaged Kindle app is set up under the current Windows user and has downloaded a book. |
-| ASIN is missing or listing lacks a title | Check the book is local and in the expected folder layout. A missing title can mean metadata could not be read even though the download was discovered. |
-| No `.azw`, multiple `.azw` files, or missing voucher | Pass the individual book folder and keep its original companions together. |
-| Windows could not open the Kindle storage key or registration | Run under the Windows user that downloaded the book. Check that Kindle is still signed in on that installation. |
-| Unsupported voucher selector or KFX container | The tool supports specific Kindle delivery formats. Check the [tested setup](setup.md) and that the source is a KFX download. |
-| Output already exists | Pick another destination or filename. A successful previous export is preserved. |
-| Boko conversion or image validation failed | Try `--epub-engine basic` for a reflowable book, or export KFX-ZIP to retain the source component structure. |
-| Fixed-layout KFX has no supported PDF-backed pages | Use KFX-ZIP to export the components if the delivery is otherwise supported. |
-
-Open a converted EPUB or PDF in your reader and check the reading order, images, and navigation you rely on before treating it as a usable copy. See [how it works](implementation.md) for the checks performed during conversion.
+`--quiet` (or `-q`) suppresses progress and success messages and keeps errors visible. With no book selected, quiet mode suppresses listing. Use `--help` (or `-h`) for the full version number and command syntax.

@@ -4,6 +4,8 @@ Kindle-stripper reads downloads from the packaged Kindle for Windows app. The te
 
 Use the tool with books you already have access to through your own Kindle account. Keep exports for personal use.
 
+This guide describes the version in the source tree. If the downloadable release predates 0.200.0, [build from source](#build-from-source) for the interactive prompts and embedded icon.
+
 ## Run the Windows x64 release
 
 1. Install Kindle for Windows, sign in, and download a book. A title visible in your cloud library still needs a local download.
@@ -15,7 +17,7 @@ Use the tool with books you already have access to through your own Kindle accou
    .\kindle-stripper.exe
    ```
 
-Help works before Kindle is configured. The second command reads the local download list. PowerShell uses `.\` to run an executable from the current directory. If you keep the executable elsewhere, use the call operator with its quoted path:
+Help displays the version and syntax before Kindle is configured. The second command reads the local download list. In builds from version 0.200.0, double-click the executable or run `.\kindle-stripper.exe -i` for guided export. PowerShell uses `.\` to run an executable from the current directory. If you keep the executable elsewhere, use the call operator with its quoted path:
 
 ```powershell
 & 'C:\Tools\Kindle-stripper\kindle-stripper.exe' --help
@@ -48,6 +50,6 @@ cargo build --locked --release
 .\target\release\kindle-stripper.exe --help
 ```
 
-The executable is at `target\release\kindle-stripper.exe`. Cargo uses the checked-in dependency versions through `--locked`. If the linker reports that `link.exe` is missing, check the MSVC build tools and retry from a Visual Studio developer shell. If PowerShell cannot resolve `cargo` or `rustup`, reopen the shell and check the Rust installation.
+The executable is at `target\release\kindle-stripper.exe`. Cargo uses the checked-in dependency versions through `--locked`. The build uses the Windows SDK resource compiler to embed the checked-in icon. If the build cannot find `link.exe` or `rc.exe`, check that the MSVC build tools and Windows SDK are installed, then retry from a Visual Studio developer shell. If PowerShell cannot resolve `cargo` or `rustup`, reopen the shell and check the Rust installation.
 
 Continue with [usage examples](usage.md) once help and listing work.

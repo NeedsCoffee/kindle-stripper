@@ -2,28 +2,40 @@
 
 Kindle-stripper is a Rust CLI for the packaged Kindle for Windows app. It reads local downloads, opens supported Kindle delivery wrappers, and either preserves the resulting KFX components or converts their contents. The [README](../README.md#attribution-and-license) credits the upstream reverse engineering and format references. The Rust implementation combines that work with Windows-native credential access and local export.
 
-See the [code flow diagrams](code-flow.md) for a visual walkthrough of command dispatch and export.
+See the [code flow diagrams](code-flow.md) for a visual walkthrough of launch detection, interactive selection, and export.
 
 ## Follow one book through the pipeline
 
 | Stage | Input | Output | Implementation |
 | --- | --- | --- | --- |
-| Select | ASIN, ASIN list, folder, or `--all` | One or more book directories | [main.rs](../src/main.rs) |
+| Launch | Windows console state and arguments | Interactive prompts or direct command dispatch | [main.rs](../src/main.rs), [interactive.rs](../src/interactive.rs) |
+| Select | ASIN, ASIN list, folder, or all downloads, with optional list numbers in interactive mode | One or more book directories | [interactive.rs](../src/interactive.rs), [main.rs](../src/main.rs) |
 | Collect | Directory entries | Main KFX component and companions | [main.rs](../src/main.rs) |
 | Open protected delivery | Local Kindle state plus vouchers | Content keys indexed by voucher ID | [kindle_store.rs](../src/kindle_store.rs), [voucher.rs](../src/voucher.rs), [voucher_mixer.rs](../src/voucher_mixer.rs) |
 | Read components | DRMION or unwrapped KFX files | Individual `CONT` containers | [drmion.rs](../src/drmion.rs), [ion.rs](../src/ion.rs) |
+| Resolve destination | Selected export format, available metadata, and destination options | Validated export path | [main.rs](../src/main.rs), [windows_paths.rs](../src/windows_paths.rs), [book_names.rs](../src/book_names.rs) |
 | Package or convert | KFX containers | KFX-ZIP, EPUB 3, or PDF | [main.rs](../src/main.rs), [boko_epub.rs](../src/boko_epub.rs), [epub.rs](../src/epub.rs), [kfx_pdf.rs](../src/kfx_pdf.rs) |
-| Publish | Completed temporary file | Final export at the requested path | [main.rs](../src/main.rs), [windows_paths.rs](../src/windows_paths.rs) |
+| Publish | Completed temporary file | Final export at the requested path | [main.rs](../src/main.rs) |
+
+## Launch and interactive input
+
+`main` starts [interactive.rs](../src/interactive.rs) for a standalone `-i` or `--interactive` argument, or when an argument-free launch appears to have opened a fresh console. The automatic check requires terminal stdin and stdout, then uses `GetConsoleProcessList` to check that the current process is the only one attached. A fresh console is a launch hint that covers typical File Explorer double-clicks. This route waits for Enter after reporting the result, including an error. Explicit interactive mode also requires terminal stdin and stdout and returns as soon as the session ends.
+
+`interactive::run` lists discovered books in ASIN order and keeps that list for the session. The numbers identify positions in that list, starting at one. `resolve_book_selection` converts numbers to ASINs before dispatch, preserves the order in a mixed list and checks duplicates after conversion. A ten-character numeric ASIN is treated as an ASIN. A discovery error leaves the direct book folder option available. Out-of-range numbers, malformed lists, and invalid menu choices prompt again. An empty book selection or end of input cancels the session.
+
+After collecting the selection, format, optional EPUB engine, and destination, the prompts pass equivalent arguments to the same `run` function that handles the CLI. Book numbers stay local to the prompts. The shared dispatcher resolves ASINs against the downloads at export time.
 
 ## Selection, naming, and paths
 
-`run` parses OS-native arguments and validates combinations before dispatch. An existing directory takes precedence over interpreting the argument as an ASIN or an ASIN list. Automatic discovery checks for the expected download folder and main filename, then sorts the results. An explicit list uses the caller's order and resolves every ASIN before starting. Batches process books sequentially so the reported position and failure belong to a specific ASIN.
+`run` parses OS-native arguments and validates them before dispatching an export. A direct invocation with no selector lists downloads in ASIN order, unless quiet mode suppresses the listing. An existing directory takes precedence over interpreting the selector as an ASIN or ASIN list. Discovery checks for the expected download folder and main filename. An explicit list uses the caller's order and resolves every ASIN before starting. Batches process books sequentially so the reported position and failure belong to a specific ASIN.
 
 `collect_components` selects regular files with `.azw`, `.md`, and `.res` extensions, sorts them, and requires exactly one main file. Vouchers are read separately when any selected component starts with DRMION magic. A component's extension alone cannot tell whether it is wrapped.
 
 [book_names.rs](../src/book_names.rs) tries metadata companions first. Listing can read an unwrapped title immediately and loads credentials lazily when it encounters wrapped metadata. It reuses the credential lookup across the listing and derives keys per book when needed. If metadata fails, it still prints the ASIN. Export names use the title, first author and ASIN where available, budget the generated name in UTF-16 units, and substitute safe characters for Windows filename restrictions.
 
 `windows_paths` checks Unicode, drive prefixes, invalid characters, and DOS device names before I/O. The export directory is canonicalised and checked against the Kindle `LocalState` ancestor chain. Resolving junctions first lets the check and the final write use the same resolved destination.
+
+When the user enters an output folder in interactive mode, `create_export_directory` validates the path and finds its nearest existing ancestor. It resolves and checks that ancestor before creating missing directories one level at a time. It resolves and checks each resulting directory before continuing. Direct `--output-folder` paths and the parent of an exact output file path require an existing directory.
 
 ## Windows storage and voucher derivation
 
@@ -87,10 +99,16 @@ Both archive and conversion writers build a temporary file in the resolved desti
 
 Component reads and reconstructed DRMION output are each capped at 512 MiB. Voucher reads are capped at 64 KiB. The Boko adapter limits merged entity payloads to 256 MiB and caps the index at 100,000 entries. The code also bounds selected parser nesting, page counts and XML reads. These limits constrain malformed or unusually large inputs. Conversion can still use substantially more memory than the final file size because parsers, adapters and writers hold overlapping representations.
 
-## Verify changes
+## Windows build and executable icon
 
 The Windows MSVC configuration in `.cargo/config.toml` links the C runtime statically. The Rust dependencies are compiled into the executable, while Windows supplies CNG and DPAPI through system APIs.
 
-Run `cargo test --locked --release` on Windows. Unit tests cover areas including Windows path handling, naming, voucher processing, image checks, EPUB styling and navigation. [parser_fuzz.rs](../src/parser_fuzz.rs) exercises mutated synthetic Ion and DRMION inputs, including compressed pages and truncation.
+On Windows targets, [build.rs](../build.rs) uses the build dependency `embed-resource` to compile [kindle-stripper.rc](../kindle-stripper.rc) and link its icon into the Kindle-stripper executable. Cargo reruns the build script when the resource script or icon changes. The checked-in [ICO](../kindle-stripper.ico) comes from the [mascot SVG](../logo.svg) and contains 15 transparent square frames from 16×16 to 256×256 pixels. The build consumes the ICO directly. When the source artwork changes, regenerate the ICO before rebuilding.
+
+## Verify changes
+
+Run `cargo test --locked --release` on Windows. Unit tests cover interactive selection and cancellation, directory creation, Windows path handling, naming, voucher processing, image checks, EPUB styling and navigation. [parser_fuzz.rs](../src/parser_fuzz.rs) exercises mutated synthetic Ion and DRMION inputs, including compressed pages and truncation.
+
+To verify launch behaviour, try an argument-free launch in a fresh console, a plain invocation from an existing terminal, and `-i` from that terminal. Check that the fresh-console run pauses at exit, the plain terminal invocation lists downloads, and `-i` prompts and then exits without a pause. Use `--help` to verify the built version and inspect the executable icon in File Explorer.
 
 For a change to the export pipeline, run the CLI on representative local downloads and check each affected output. Compare archive entry names and component bytes, inspect EPUB text, navigation and images, and compare PDF pages and order with the source. Use a separate conformance checker when assessing EPUB conformance. Local integration checks depend on the Kindle version, Windows profile and sample formats used.

@@ -64,10 +64,10 @@ pub fn read(components: &[PathBuf], keys: &ContentKeys) -> Option<BookName> {
     metadata_first(components).find_map(|path| read_name(path, keys))
 }
 
-pub fn list(books: &[(String, PathBuf)]) {
+pub fn list(books: &[(String, PathBuf)], numbered: bool) {
     let mut credentials = None;
     let empty_keys = ContentKeys::new();
-    for (asin, folder) in books {
+    for (index, (asin, folder)) in books.iter().enumerate() {
         let name = crate::collect_components(folder)
             .ok()
             .and_then(|(_, components)| {
@@ -92,10 +92,12 @@ pub fn list(books: &[(String, PathBuf)]) {
                     read_name(path, keys)
                 })
             });
-        if let Some(name) = name {
-            println!("{asin}  {}", name.title);
-        } else {
-            println!("{asin}");
+        let number = numbered
+            .then(|| format!("{}  ", index + 1))
+            .unwrap_or_default();
+        match name {
+            Some(name) => println!("{number}{asin}  {}", name.title),
+            None => println!("{number}{asin}"),
         }
     }
 }

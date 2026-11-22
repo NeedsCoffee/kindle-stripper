@@ -6,6 +6,7 @@ mod epub;
 mod epub_image_check;
 mod epub_navigation;
 mod epub_style;
+mod interactive;
 mod ion;
 mod kfx_pdf;
 mod kindle_store;
@@ -19,7 +20,9 @@ mod windows_paths;
 use anyhow::{Context, Result, bail, ensure};
 use drmion::ContentKeys;
 use std::{
-    env, fs,
+    env,
+    ffi::OsString,
+    fs,
     io::{self, Read},
     path::{Path, PathBuf},
     process::ExitCode,
@@ -28,6 +31,7 @@ use tempfile::NamedTempFile;
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 const USAGE: &str = "kindle-stripper                           List downloaded ASINs and titles
+kindle-stripper --interactive, -i          Choose export options interactively
 kindle-stripper <ASIN | book-folder> [--convert [--epub-engine <boko|basic>]] [--output <path> | --output-folder <directory>] [--quiet]
 kindle-stripper <ASIN,ASIN,... | --all> [--output-folder <directory>] [--convert [--epub-engine <boko|basic>]] [--quiet]
   --all        Export all locally downloaded books.
@@ -38,9 +42,7 @@ kindle-stripper <ASIN,ASIN,... | --all> [--output-folder <directory>] [--convert
 const HELP_HEADER: &str = concat!(
     env!("CARGO_PKG_NAME"),
     " ",
-    env!("CARGO_PKG_VERSION_MAJOR"),
-    ".",
-    env!("CARGO_PKG_VERSION_MINOR"),
+    env!("CARGO_PKG_VERSION"),
     "\n",
     env!("CARGO_PKG_DESCRIPTION"),
     "\nhttps://github.com/Satsuoni/DeDRM_tools/",
@@ -48,17 +50,32 @@ const HELP_HEADER: &str = concat!(
 const MAX_COMPONENT: u64 = 512 * 1024 * 1024;
 
 fn main() -> ExitCode {
-    match run() {
+    let args: Vec<_> = env::args_os().skip(1).collect();
+    let pause_on_exit = args.is_empty() && interactive::has_dedicated_console();
+    let explicit_interactive = matches!(
+        args.as_slice(),
+        [flag] if matches!(flag.to_str(), Some("--interactive" | "-i"))
+    );
+    let result = if pause_on_exit || explicit_interactive {
+        interactive::run()
+    } else {
+        run(args, false)
+    };
+    let exit_code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             eprintln!("Error: {error:#}");
             ExitCode::FAILURE
         }
+    };
+    if pause_on_exit {
+        interactive::pause_on_exit();
     }
+    exit_code
 }
 
-fn run() -> Result<()> {
-    let mut args = env::args_os().skip(1);
+fn run(args: impl IntoIterator<Item = OsString>, create_output_folder: bool) -> Result<()> {
+    let mut args = args.into_iter();
     let mut source = None;
     let mut output = None;
     let mut output_folder = None;
@@ -73,6 +90,7 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             Some("--quiet" | "-q") => quiet = true,
+            Some("--interactive" | "-i") => bail!("use --interactive or -i on its own"),
             Some("--verbose" | "-v") => {}
             Some("--convert") => convert = true,
             Some("--all") => all = true,
@@ -118,6 +136,9 @@ fn run() -> Result<()> {
         use_boko: epub_engine.unwrap_or(true),
         verbose: !quiet,
     };
+    if create_output_folder && let Some(directory) = &output_folder {
+        create_export_directory(directory)?;
+    }
     if all {
         ensure!(
             source.is_none() && output.is_none(),
@@ -135,12 +156,7 @@ fn run() -> Result<()> {
             return Ok(());
         }
         ensure!(!convert, "--convert requires an ASIN or book folder");
-        let books = downloaded_books()?;
-        eprintln!("Found {} downloaded Kindle books.", books.len());
-        if books.is_empty() {
-            println!("No downloaded Kindle books found.");
-        }
-        book_names::list(&books);
+        list_downloads(&downloaded_books()?, false);
 
         return Ok(());
     };
@@ -315,6 +331,14 @@ fn parse_asin_list(selector: &str) -> Result<Vec<String>> {
 
 fn is_asin(value: &str) -> bool {
     value.len() == 10 && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
+}
+
+fn list_downloads(books: &[(String, PathBuf)], numbered: bool) {
+    eprintln!("Found {} downloaded Kindle books.", books.len());
+    if books.is_empty() {
+        println!("No downloaded Kindle books found.");
+    }
+    book_names::list(books, numbered);
 }
 
 fn downloaded_books() -> Result<Vec<(String, PathBuf)>> {
@@ -558,6 +582,10 @@ fn resolve_export_path(output: &Path) -> Result<PathBuf> {
 
 fn resolve_export_directory(directory: &Path) -> Result<PathBuf> {
     windows_paths::validate(directory, false).context("invalid output directory")?;
+    resolve_existing_export_directory(directory)
+}
+
+fn resolve_existing_export_directory(directory: &Path) -> Result<PathBuf> {
     // Resolve junctions before checking the destination and use that same
     // directory for both the temporary archive and its final name.
     let directory =
@@ -574,4 +602,67 @@ fn resolve_export_directory(directory: &Path) -> Result<PathBuf> {
         Err(error) => return Err(error).context("resolving Windows Kindle app data"),
     }
     Ok(directory)
+}
+
+fn create_export_directory(directory: &Path) -> Result<()> {
+    windows_paths::validate(directory, false).context("invalid output directory")?;
+    let mut ancestor = directory;
+    let mut missing = Vec::new();
+    loop {
+        match fs::symlink_metadata(ancestor) {
+            Ok(_) => break,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {
+                missing.push(
+                    ancestor
+                        .file_name()
+                        .context("invalid new output directory")?,
+                );
+                ancestor = ancestor
+                    .parent()
+                    .filter(|path| !path.as_os_str().is_empty())
+                    .unwrap_or_else(|| Path::new("."));
+            }
+            Err(error) => return Err(error).context("checking output directory"),
+        }
+    }
+    let mut resolved = resolve_export_directory(ancestor)?;
+    for part in missing.into_iter().rev() {
+        resolved.push(part);
+        match fs::create_dir(&resolved) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+            Err(error) => {
+                return Err(error).with_context(|| {
+                    format!(
+                        "creating output directory {}",
+                        windows_paths::display(&resolved)
+                    )
+                });
+            }
+        }
+        // Recheck an existing directory if another process created it first.
+        resolved = resolve_existing_export_directory(&resolved)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod export_directory_tests {
+    use super::*;
+
+    #[test]
+    fn interactive_output_creates_nested_folders_and_rejects_file_parents() -> Result<()> {
+        let temporary = tempfile::tempdir()?;
+        let destination = temporary.path().join("Kindle Exports/Nested");
+        assert!(resolve_export_directory(&destination).is_err());
+        create_export_directory(&destination)?;
+        create_export_directory(&destination)?;
+        assert!(destination.is_dir());
+
+        let file = destination.join("existing");
+        fs::write(&file, "keep")?;
+        assert!(create_export_directory(&file.join("nested")).is_err());
+        assert_eq!(fs::read_to_string(file)?, "keep");
+        Ok(())
+    }
 }

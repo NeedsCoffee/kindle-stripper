@@ -18,4 +18,6 @@ The three newer files listed above (`msix_registration.py`, `voucher_route.py`, 
 
 ## Rust dependencies
 
-The Windows binary archive includes the locked crates' license and notice files under `third-party-licenses/`, with a manifest of package versions and declared licenses. The accompanying source archive includes those crates' original source trees and notices under `vendor/`. See the release page for the matching source download.
+The Windows binary archive includes the locked crates' license and notice files under `third-party-licenses/`, with a manifest of package versions, declared licenses, and source URLs.
+
+For releases from v0.200.0, download **Source code (zip)** or **Source code (tar.gz)** from the matching [GitHub release](https://github.com/NeedsCoffee/kindle-stripper/releases). Extract it and run `cargo fetch --locked` from its root to download the exact dependency sources identified by `Cargo.lock` from crates.io. To collect the dependency source trees in the extracted folder, run `cargo vendor --locked`. The [Windows build instructions](docs/setup.md#build-from-source) apply to the tagged source.
