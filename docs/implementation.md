@@ -2,6 +2,8 @@
 
 Kindle-stripper is a Rust CLI for the packaged Kindle for Windows app. It reads local downloads, opens supported Kindle delivery wrappers, and either preserves the resulting KFX components or converts their contents. The [README](../README.md#attribution-and-license) credits the upstream reverse engineering and format references. The Rust implementation combines that work with Windows-native credential access and local export.
 
+See the [code flow diagrams](code-flow.md) for a visual walkthrough of command dispatch and export.
+
 ## Follow one book through the pipeline
 
 | Stage | Input | Output | Implementation |
