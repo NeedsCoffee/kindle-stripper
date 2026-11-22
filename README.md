@@ -49,6 +49,10 @@ Boko is the default EPUB engine. Use `--epub-engine basic` to select the built-i
 
 ## Attribution and license
 
-The original concepts and reverse engineering came from upstream developers. My contribution was to rework their approach into a simpler Rust tool. Kindle-stripper is based on [Satsuoni's fork of DeDRM Tools](https://github.com/Satsuoni/DeDRM_tools/). John Howell's [KFX Input plugin](https://www.mobileread.com/forums/showthread.php?t=291290) served as a KFX format reference. The default EPUB engine uses [boko](https://github.com/zacharydenton/boko).
+Kindle-stripper owes its existence to the people who wrote, published, and maintained the original tools. The Dark Reverser published the early Kindle and Mobipocket tools, and i♥cabbages published the early EPUB tools. Apprentice Alf brought the tools together and improved them alongside contributors including DiapDealer and some_updates. Apprentice Harper later took over maintenance and preserved the project's history. [Apprentice Alf's account of the early tools](https://apprenticealf.wordpress.com/author/apprenticealf/) · [Apprentice Harper's DeDRM Tools](https://github.com/apprenticeharper/DeDRM_tools)
+
+noDRM continued DeDRM Tools from Apprentice Harper's repository, and Satsuoni forked noDRM's project. Satsuoni's work on Kindle for Windows is the immediate basis for Kindle-stripper. My contribution was to rework that approach into a simpler Rust tool. Thank you to everyone whose reverse engineering, code, and maintenance made it possible. [noDRM's DeDRM Tools](https://github.com/noDRM/DeDRM_tools) · [Satsuoni's DeDRM Tools](https://github.com/Satsuoni/DeDRM_tools)
+
+John Howell's KFX Input plugin served as a KFX format reference. The default EPUB engine uses Zachary Denton's boko. [KFX Input](https://www.mobileread.com/forums/showthread.php?t=291290) · [boko](https://github.com/zacharydenton/boko)
 
 This project is licensed under GPL-3.0-only. See [LICENSE](LICENSE).
